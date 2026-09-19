@@ -58,8 +58,23 @@
       rel="stylesheet"
     />
 
-    <!-- primeiro frame da sequência: evita o "flash" branco na entrada -->
-    <link rel="preload" as="image" href="assets/frames/ezgif-frame-001.jpg" />
+    <!--
+      Primeiro frame da sequência: evita o "flash" branco na entrada.
+      São dois conjuntos (ver FRAME_SET no main.js) e o media= garante que o
+      celular não baixe o quadro de 1920px só para descartá-lo.
+    -->
+    <link
+      rel="preload"
+      as="image"
+      href="assets/frames/ezgif-frame-001.jpg"
+      media="(min-width: 701px)"
+    />
+    <link
+      rel="preload"
+      as="image"
+      href="assets/frames-mobile/frame-001.jpg"
+      media="(max-width: 700px)"
+    />
 
     <link rel="stylesheet" href="style.css" />
   </head>

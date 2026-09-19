@@ -83,7 +83,28 @@ let smoother = null;
 /* ==========================================================================
    2 — SEQUÊNCIA DE FRAMES (o "vídeo" do plano de fundo do .stage)
    ========================================================================== */
-const FRAME_COUNT = 59;
+/* Dois conjuntos do mesmo take.
+
+   O original tem 59 quadros a 1920x1080. Decodificados, são 8,3 MB de bitmap
+   cada — 467 MB se o navegador segurar todos — e cada tick de rolagem reduz
+   um par deles para os ~360px do canvas. Num celular isso é caro à toa: o
+   canvas nunca passa de uns 360x200.
+
+   O conjunto leve tem metade dos quadros a 720x405: 33 MB decodificados e
+   ~0,7 MB de download. Metade dos quadros funciona porque o render() já
+   interpola entre vizinhos (o playhead é fracionário) — a suavidade vem do
+   crossfade, não da contagem.
+
+   A escolha é pela MENOR dimensão da tela do aparelho, não pela largura da
+   janela: um celular continua sendo um celular deitado, e assim o conjunto é
+   decidido uma vez só, sem recarregar nada quando o aparelho gira. */
+const USE_LIGHT_FRAMES = Math.min(screen.width, screen.height) <= 700;
+
+const FRAME_SET = USE_LIGHT_FRAMES
+  ? { count: 30, src: i => `assets/frames-mobile/frame-${String(i).padStart(3, "0")}.jpg` }
+  : { count: 59, src: i => `assets/frames/ezgif-frame-${String(i).padStart(3, "0")}.jpg` };
+
+const FRAME_COUNT = FRAME_SET.count;
 const LAST_FRAME  = FRAME_COUNT - 1;
 
 /* O enquadramento vertical repete o antigo background-position: 50% 66.9% */
@@ -101,7 +122,8 @@ const playhead = { frame: 0 };
 const frames = [];
 for (let i = 1; i <= FRAME_COUNT; i++) {
   const img = new Image();
-  img.src = `assets/frames/ezgif-frame-${String(i).padStart(3, "0")}.jpg`;
+  img.decoding = "async";
+  img.src = FRAME_SET.src(i);
   /* redesenha assim que cada imagem chega, para o canvas nunca ficar vazio */
   img.addEventListener("load", render, { once: true });
   frames.push(img);
@@ -167,10 +189,11 @@ const ACT_2 = 5;
 const TL_DURATION = ACT_1 + ACT_2;
 const SCROLL_PER_UNIT = 40;
 
-/* Em retrato não existe ato 1 (ainda), e sem nenhum respiro a máscara
-   começaria a abrir no primeiro pixel de rolagem. 1,5u = 60% de uma tela
-   parada, tempo de ler o título antes de o trailer tomar conta. */
-const LEAD_IN = 1.5;
+/* O ato 1 do retrato é mais curto que o do desktop: ele tem só a sequência de
+   frames (a troca de sinopse é a etapa C) e o conjunto leve tem metade dos
+   quadros, então esticá-lo até 10u faria cada quadro segurar tempo demais.
+   7u dão ~79px de rolagem por quadro, quase o mesmo do desktop. */
+const ACT_1_PORTRAIT = 7;
 
 /* Quanto tempo cada letra leva para sumir/aparecer... */
 const CHAR_FADE = 0.5;
@@ -504,15 +527,10 @@ function buildTimeline() {
   applyReveal();
   player.reset();
 
-  /* Em retrato o canvas fica parado no primeiro quadro: a sequência de frames
-     é a etapa B. */
-  if (isPortrait) {
-    playhead.frame = 0;
-    render();
-  }
+  playhead.frame = 0;
+  render();
 
-  /* Sem o ato 1, a timeline do retrato é só um respiro + a máscara. */
-  const act2At   = isPortrait ? LEAD_IN : ACT_1;
+  const act2At   = isPortrait ? ACT_1_PORTRAIT : ACT_1;
   const duration = act2At + ACT_2;
 
   /* --- a timeline --- */
@@ -539,24 +557,29 @@ function buildTimeline() {
   });
 
   /* ------------------------------------------------------------------------
-     ATO 1 — frames + troca de sinopse. Ainda só no desktop: em retrato as
-     etapas B e C entram aqui.
+     ATO 1 — a sequência de frames, nos dois formatos. A troca de sinopse
+     letra a letra ainda é só do desktop: é a etapa C.
      ------------------------------------------------------------------------ */
+  buildFrames(act2At);
   if (!isPortrait) buildAct1();
 
   buildAct2(act2At, duration);
 }
 
 
-function buildAct1() {
-  /* 3.1 — Frames: do primeiro ao último, cobrindo o ato 1 inteiro */
+/* A sequência ocupa o ato 1 inteiro, seja ele qual for: começa em 0 e termina
+   exatamente onde a máscara começa a abrir. */
+function buildFrames(duration) {
   master.to(playhead, {
     frame: LAST_FRAME,
-    duration: ACT_1,
+    duration,
     ease: "none",
     onUpdate: render
   }, 0);
+}
 
+
+function buildAct1() {
   /* 3.2 — Troca de textos, letra a letra e em ordem aleatória.
      Posições calculadas para o 1º fade começar em 0 e o último terminar
      exatamente em ACT_1 — mesmo início e mesmo fim dos frames. */
