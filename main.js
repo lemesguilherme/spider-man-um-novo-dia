@@ -498,23 +498,23 @@ function buildTimeline() {
   splits.forEach(s => s.revert());
   splits = [];
 
-  /* --- ato 1: letra a letra, só no desktop por enquanto (etapa C) --- */
-  if (isPortrait) {
-    /* Em retrato a sinopse ainda não troca: o primeiro parágrafo fica, os
-       outros dois seguem invisíveis (o CSS já os deixa assim). */
-    gsap.set(textEls[0], { opacity: 1 });
-    gsap.set(textEls.slice(1), { opacity: 0 });
-  } else {
-    splits = textEls.map(el => SplitText.create(el, {
-      type: "words,chars",   // quebra por palavras também: preserva o wrap do texto
-      aria: "auto"           // leitores de tela continuam lendo o texto original
-    }));
+  /* --- quebra os três parágrafos em letras, nos dois formatos --- */
+  splits = textEls.map(el => SplitText.create(el, {
+    type: "words,chars",   // quebra por palavras também: preserva o wrap do texto
+    aria: "auto"           // leitores de tela continuam lendo o texto original
+  }));
 
-    gsap.set(textEls, { opacity: 1 });
-    gsap.set(splits[0].chars, { opacity: 1 });
-    gsap.set([...splits[1].chars, ...splits[2].chars], { opacity: 0 });
-    gsap.set(textBox, { color: "rgba(0, 0, 0, 0.9)" });
-  }
+  /* --- estado inicial: só o primeiro texto visível --- */
+  gsap.set(textEls, { opacity: 1 });
+  gsap.set(splits[0].chars, { opacity: 1 });
+  gsap.set([...splits[1].chars, ...splits[2].chars], { opacity: 0 });
+
+  /* A cor só entra na timeline no desktop. Lá a sinopse fica SOBRE a arte,
+     que começa clara e termina escura, então ela precisa virar de preta para
+     branca no meio do caminho. Em retrato a sinopse está abaixo da faixa de
+     imagem, sobre o vermelho escuro do hero: nasce branca pelo CSS e assim
+     continua, sem nada para acompanhar. */
+  if (!isPortrait) gsap.set(textBox, { color: "rgba(0, 0, 0, 0.9)" });
 
   gsap.set(ring, { filter: "invert(0)" });
   gsap.set(badge, { opacity: 1 });
@@ -557,11 +557,12 @@ function buildTimeline() {
   });
 
   /* ------------------------------------------------------------------------
-     ATO 1 — a sequência de frames, nos dois formatos. A troca de sinopse
-     letra a letra ainda é só do desktop: é a etapa C.
+     ATO 1 — a sequência de frames e a troca de sinopse, nos dois formatos.
+     As duas ocupam o ato inteiro, então começam e terminam juntas.
      ------------------------------------------------------------------------ */
   buildFrames(act2At);
-  if (!isPortrait) buildAct1();
+  buildTextSwap(act2At);
+  if (!isPortrait) buildLegibility();
 
   buildAct2(act2At, duration);
 }
@@ -579,10 +580,12 @@ function buildFrames(duration) {
 }
 
 
-function buildAct1() {
-  /* 3.2 — Troca de textos, letra a letra e em ordem aleatória.
-     Posições calculadas para o 1º fade começar em 0 e o último terminar
-     exatamente em ACT_1 — mesmo início e mesmo fim dos frames. */
+/* Troca de textos, letra a letra e em ordem aleatória.
+   As posições são calculadas a partir da duração do ato para o 1º fade
+   começar em 0 e o último terminar exatamente no fim dele — mesmo início e
+   mesmo fim da sequência de frames, seja o ato de 10u (desktop) ou 7u
+   (retrato). */
+function buildTextSwap(actDuration) {
   const fadeOut = (chars, at) => master.to(chars, {
     opacity: 0,
     duration: CHAR_FADE,
@@ -597,15 +600,18 @@ function buildAct1() {
     stagger: { amount: CHAR_SPREAD, from: "random" }
   }, at);
 
-  const in3Start  = ACT_1 - FADE_BLOCK;   // último bloco encosta no fim do ato 1
+  const in3Start  = actDuration - FADE_BLOCK;   // o último bloco encosta no fim
   const out2Start = in3Start - OVERLAP;
 
   fadeOut(splits[0].chars, 0);
   fadeIn (splits[1].chars, OVERLAP);
   fadeOut(splits[1].chars, out2Start);
   fadeIn (splits[2].chars, in3Start);
+}
 
-  /* 3.3 — Legibilidade.
+
+function buildLegibility() {
+  /* Legibilidade — só no desktop.
      A sequência começa com fundo branco e termina em preto, então a sinopse
      preta e o selo circular preto sumiriam no fim. Os dois trechos abaixo
      acompanham essa virada — e cada um no seu tempo, porque as duas regiões
