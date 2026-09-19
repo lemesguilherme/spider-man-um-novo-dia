@@ -648,11 +648,13 @@ body {
 
 
 /* ==========================================================================
-   ELENCO ESTÁTICO — movimento reduzido OU tela estreita
-   O elenco ainda não tem versão retrato: em tela estreita ele sai do pin e
-   vira lista + grade de fotos. O par disto no main.js é castStatic.
+   ELENCO ESTÁTICO — movimento reduzido
+   Sem pin e sem scrub, os seis atores não podem se revezar: todos aparecem de
+   uma vez, como lista de nomes + grade de fotos. O par disto no main.js é
+   isStatic. Em tela estreita SEM movimento reduzido o elenco tem coreografia
+   própria, mais abaixo.
    ========================================================================== */
-@media (prefers-reduced-motion: reduce), (max-width: 700px) {
+@media (prefers-reduced-motion: reduce) {
   .cast {
     height: auto;
     display: flex;
@@ -979,6 +981,95 @@ body {
     transform: translate(-50%, calc(-50% + var(--frame-shift, 0px)));
   }
 
+
+  /* ======================================================================
+     ELENCO em retrato
+
+     Mesma coreografia do desktop, reempilhada: rótulo, foto, nome e o
+     indicador com a lista dos seis. Deitado essas quatro coisas ocupam duas
+     colunas; em pé viram quatro faixas.
+
+     A lista dos seis custa 158px de altura e cabe — foi ela que decidiu o
+     desenho, porque é só com ela que a aranha continua apontando para um
+     NOME, e não para uma posição qualquer de uma barra de progresso.
+     ====================================================================== */
+  .cast {
+    height: 100vh;              /* fallback para quem não tem svh */
+    height: 100svh;
+
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: .75rem;
+    padding: 1rem;
+  }
+
+  /* O rótulo, o nome e o indicador são filhos do .cast__info, e a foto é irmã
+     dele — mas em pé a foto precisa entrar ENTRE o rótulo e o nome. Com
+     display: contents o .cast__info deixa de gerar caixa e entrega os três
+     filhos direto ao .cast, onde a ordem pode ser escolhida. */
+  .cast__info { display: contents; }
+
+  .cast__label  { order: 0; }
+  .cast__media  { order: 1; }
+  .cast__person { order: 2; }
+  .cast__picker { order: 3; }
+
+  .cast__label {
+    flex-shrink: 0;
+    font-size: 1.125rem;
+    line-height: 1.2;
+  }
+
+  /* A proporção da foto é escolhida, não herdada do espaço que sobra.
+     As stills são deitadas (1443x857). Num slot de 358x536 — que é o que
+     sobrava — o recorte "cover" descarta 60% da largura e um primeiro plano
+     como o do Ned vira um fragmento de rosto. A 5/6 sobram 49% da original,
+     que é a proporção do rascunho aprovado.
+
+     flex: 0 1 auto deixa a foto encolher em aparelho baixo em vez de estourar
+     a tela, e o justify-content do .cast reparte a folga em cima e embaixo. */
+  .cast__media {
+    position: relative;
+    inset: auto;
+    flex: 0 1 auto;
+    width: 100%;
+    aspect-ratio: 5 / 6;
+    border-radius: 1.25rem;
+  }
+
+  /* Altura fixa, porque os pares nome+papel são absolutos e empilhados —
+     é o que permite o crossfade sem o layout pular. */
+  .cast__person {
+    flex-shrink: 0;
+    height: 3.75rem;
+  }
+
+  /* A 28px o nome mais longo ("Jacob Batalon") mede ~200px numa coluna de
+     358px, então volta a caber em uma linha — e aqui precisa caber, porque
+     a caixa tem altura fixa. */
+  .cast__name {
+    font-size: 1.75rem;
+    line-height: 1.25;
+    white-space: nowrap;
+  }
+
+  .cast__role {
+    font-size: .8125rem;
+    line-height: 1.4;
+  }
+
+  .cast__picker {
+    flex-shrink: 0;
+    gap: .75rem;
+  }
+
+  .cast__list { gap: 1rem; }
+
+  .cast__item {
+    font-size: .8125rem;
+    line-height: 1;
+  }
 }
 
 

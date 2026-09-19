@@ -35,8 +35,9 @@ gsap.registerPlugin(ScrollTrigger, ScrollSmoother, SplitText);
 
      DESKTOP    o arranjo original.
 
-   O elenco é um caso à parte: ele ainda não tem versão retrato, então
-   continua empilhado em tela estreita (castStatic).
+   As duas seções seguem o mesmo modo: em retrato, tanto a revelação do
+   trailer quanto o revezamento do elenco continuam pinnados e com scrub,
+   cada um readaptado ao formato em pé.
 
    "reduzir movimento" não muda com a página aberta; largura muda toda vez
    que o aparelho gira. Por isso o modo é reaplicado por applyMode(), na
@@ -45,14 +46,12 @@ gsap.registerPlugin(ScrollTrigger, ScrollSmoother, SplitText);
 const REDUCED_MQ = window.matchMedia("(prefers-reduced-motion: reduce)");
 const NARROW_MQ  = window.matchMedia("(max-width: 700px)");
 
-let isStatic   = false;   // hero sem coreografia nenhuma
-let isPortrait = false;   // hero com a coreografia adaptada ao retrato
-let castStatic = false;   // elenco empilhado, sem pin
+let isStatic   = false;   // sem coreografia nenhuma, tudo em fluxo
+let isPortrait = false;   // coreografia adaptada ao formato em pé
 
 function readMode() {
   isStatic   = REDUCED_MQ.matches;
   isPortrait = !isStatic && NARROW_MQ.matches;
-  castStatic = isStatic || NARROW_MQ.matches;
 }
 readMode();
 
@@ -694,6 +693,7 @@ const CAST_DURATION = 10;
 const castSection = document.querySelector(".cast");
 const castMedia   = document.querySelector(".cast__media");
 const castList    = document.querySelector(".cast__list");
+const castPerson  = document.querySelector(".cast__person");
 const castFill    = document.querySelector(".cast__fill");
 const castSpider  = document.querySelector(".cast__spider");
 
@@ -777,7 +777,12 @@ function buildCast() {
   const HOLD  = CAST_DURATION * 0.10;
   const step  = (CAST_DURATION - HOLD * 2) / (STOPS - 1);
   const TRANS = step * 0.55;            // o resto de cada trecho é pausa
-  const SHIFT = 18 * castUnit;          // deslocamento vertical do crossfade
+
+  /* Deslocamento vertical do crossfade dos nomes. No desktop são 18u, que a
+     1920px dão 18px. Em retrato a mesma conta daria 3,6px — imperceptível,
+     porque castUnit é a largura da seção dividida por 1920. Em pé ele é
+     escrito contra a caixa do nome, que já está dimensionada em rem. */
+  const SHIFT = isPortrait ? castPerson.clientHeight * 0.22 : 18 * castUnit;
 
   for (let k = 1; k < STOPS; k++) {
     const at = HOLD + (k - 1) * step;
@@ -866,10 +871,7 @@ function applyMode() {
 
     player.preview();
     buildTimeline();
-
-    /* O elenco ainda não tem versão retrato: em tela estreita ele segue
-       empilhado, com o layout do @media do style.css. */
-    if (!castStatic) buildCast();
+    buildCast();
   }
 
   /* o .stage tem tamanhos bem diferentes entre os modos */
@@ -881,9 +883,9 @@ applyMode();
 
 /* Cada virada reaplica o modo do zero. Girar o celular passa por aqui. */
 function onModeChange() {
-  const before = [isStatic, isPortrait, castStatic].join();
+  const before = isStatic + "/" + isPortrait;
   readMode();
-  if ([isStatic, isPortrait, castStatic].join() === before) return;
+  if (isStatic + "/" + isPortrait === before) return;
   applyMode();
 }
 
@@ -900,7 +902,7 @@ if (document.fonts && document.fonts.ready) {
     if (isStatic) return;
 
     buildTimeline();
-    if (!castStatic) buildCast();
+    buildCast();
     ScrollTrigger.refresh();
   });
 }
