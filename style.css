@@ -801,6 +801,14 @@ body {
      o frame aparece inteiro e o texto cai embaixo, no vermelho do hero.
      ------------------------------------------------------------------------ */
   .stage {
+    /* Sai do inset absoluto e entra no fluxo do hero. Sem isto ele volta a se
+       ancorar em inset: 32u e escorrega para debaixo da marca e da navegação,
+       que em tela estreita são itens de fluxo no topo — o "VER ELENCO" fica
+       por cima do rosto. */
+    position: relative;
+    inset: auto;
+    width: 100%;
+
     aspect-ratio: auto;
     clip-path: none;
     border-radius: 0;
