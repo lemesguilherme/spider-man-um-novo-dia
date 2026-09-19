@@ -821,12 +821,21 @@ body {
 
   /* Logo e navegação deixam de ser absolutos e viram duas faixas no topo: a
      360px não sobra largura para os dois lado a lado com alvo de toque
-     decente (o logo sozinho já ocupa 133px). */
+     decente. */
   .brand {
     position: relative;
     left: auto;
     top: auto;
   }
+
+  /* A marca é toda escrita em --u (aranha 38u + "MARVEL" 78u dentro de uma
+     caixa de 177u), então basta dar a ela uma unidade própria para o conjunto
+     encolher junto, sem recalcular filho por filho.
+
+     Sem isto ela sai com 144px numa tela de 390 — 37% da largura, contra 9%
+     no desktop. Proporcionalmente gigante, que é o efeito de "MARVEL grande"
+     mesmo com o arranjo correto. */
+  .brand { --u: min(calc(100cqw / 690), .75px); }
 
   .nav {
     position: relative;
@@ -856,29 +865,47 @@ body {
     border-radius: 999px;
   }
 
-  /* ---------- Stage ---------- */
-  /* O recorte foi desenhado para uma caixa de 1856x1016. Como o clipPath é
-     objectBoundingBox, ele estica nos dois eixos: num retângulo alto e
-     estreito os entalhes viram buracos enormes e comem o conteúdo. No
-     celular o shape sai e fica só o canto arredondado. */
+  /* ---------- Stage: a imagem vira um bloco, o texto sai de cima dela -------
+     No desktop a sinopse fica sobre a sequência de frames, e funciona porque
+     a timeline vira a cor do texto de preto para branco acompanhando o
+     escurecer da arte. No celular não há timeline: o texto ficaria preto,
+     parado, por cima de um rosto — ilegível.
+
+     Então o canvas deixa de ser plano de fundo e vira um bloco em fluxo, com
+     a proporção nativa dos frames (1920x1080). Título e sinopse caem logo
+     abaixo, sobre o vermelho escuro do .hero.
+
+     O recorte do shape também sai: o clipPath é objectBoundingBox e estica
+     nos dois eixos, então num retângulo estreito os entalhes viram buracos.
+     -------------------------------------------------------------------- */
   .stage {
     aspect-ratio: auto;
     clip-path: none;
-    border-radius: 1.25rem;
-    padding: 1.5rem 1.25rem;
+    padding: 0;
+    border-radius: 0;
+    background-color: transparent;
   }
 
-  /* Título e sinopse lado a lado somam 894u — não cabem. Viram duas faixas,
-     e o .stage passa a ter a altura do próprio conteúdo. */
+  .stage__canvas {
+    position: relative;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
+    border-radius: 1.25rem;
+    background-color: #f2f2f2;   /* enquanto o primeiro frame não pinta */
+  }
+
+  /* Título e sinopse lado a lado somam 894u — não cabem. Viram duas faixas. */
   .movie {
     position: relative;
     left: auto;
     top: auto;
     width: 100%;
     margin-top: 0;
+    padding-top: 1.25rem;
     flex-direction: column;
     align-items: stretch;
-    gap: 1.25rem;
+    gap: 1rem;
   }
 
   .movie__title {
@@ -886,9 +913,12 @@ body {
     height: auto;
   }
 
+  /* Claro sobre o vermelho escuro do hero: 11,7:1 contra #770000, bem acima
+     dos 4,5:1 da WCAG AA. No desktop esta cor é animada pelo scrub. */
   .movie__texts {
     width: 100%;
     margin-top: 0;
+    color: rgba(255, 255, 255, .92);
   }
 
   .movie__desc {
