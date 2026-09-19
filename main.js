@@ -19,27 +19,49 @@
 gsap.registerPlugin(ScrollTrigger, ScrollSmoother, SplitText);
 
 /* ==========================================================================
-   0 — MODO ESTÁTICO
-   Duas situações dispensam a coreografia de rolagem:
+   0 — MODOS
+   Três arranjos, decididos por duas media queries que espelham exatamente os
+   @media do style.css. Divergir entre os dois arquivos é o pior dos mundos:
+   CSS mostrando um layout que o JS não está animando, ou o contrário.
 
-     - "reduzir movimento" ligado no sistema;
-     - tela estreita, onde as duas timelines pinnadas são caras e o layout
-       desenhado para 1920px não cabe de jeito nenhum.
+     ESTÁTICO   "reduzir movimento" ligado. Sem pin, sem scrub, sem
+                ScrollSmoother: tudo em fluxo e visível de saída. É o único
+                fallback sem coreografia.
 
-   Nos dois casos não há pin, não há scrub e nada depende da rolagem para
-   aparecer. A condição abaixo é DE PROPÓSITO a mesma string do @media do
-   style.css: se as duas listas divergirem, o CSS mostra um layout em fluxo
-   enquanto o JS ainda pina as seções — pior do que qualquer um dos modos.
+     RETRATO    tela estreita. A coreografia CONTINUA — ela é o ponto do
+                site — mas readaptada: a máscara do trailer abre no eixo
+                vertical e empurra título e sinopse para cima e para baixo,
+                em vez de para os lados.
 
-   Diferente de "reduzir movimento", largura de tela muda com a página já
-   carregada (girar o celular). Por isso não basta ler uma vez: o modo é
-   aplicado por applyMode(), na seção 5, que escuta a virada.
+     DESKTOP    o arranjo original.
+
+   O elenco é um caso à parte: ele ainda não tem versão retrato, então
+   continua empilhado em tela estreita (castStatic).
+
+   "reduzir movimento" não muda com a página aberta; largura muda toda vez
+   que o aparelho gira. Por isso o modo é reaplicado por applyMode(), na
+   seção 5, que escuta as duas viradas.
    ========================================================================== */
-const STATIC_MQ = window.matchMedia(
-  "(prefers-reduced-motion: reduce), (max-width: 700px)"
-);
+const REDUCED_MQ = window.matchMedia("(prefers-reduced-motion: reduce)");
+const NARROW_MQ  = window.matchMedia("(max-width: 700px)");
 
-let isStatic = STATIC_MQ.matches;
+let isStatic   = false;   // hero sem coreografia nenhuma
+let isPortrait = false;   // hero com a coreografia adaptada ao retrato
+let castStatic = false;   // elenco empilhado, sem pin
+
+function readMode() {
+  isStatic   = REDUCED_MQ.matches;
+  isPortrait = !isStatic && NARROW_MQ.matches;
+  castStatic = isStatic || NARROW_MQ.matches;
+}
+readMode();
+
+/* A barra de endereço do celular entra e sai durante a rolagem e muda a
+   altura da viewport. Para o ScrollTrigger isso é um resize, e recalcular o
+   pin no meio do movimento faz a seção saltar. Esta flag manda ignorar
+   resizes que mexem só na altura — que é exatamente o caso da barra.
+   O par disso no CSS é usar 100svh em vez de 100dvh. */
+ScrollTrigger.config({ ignoreMobileResize: true });
 
 
 /* ==========================================================================
@@ -145,6 +167,11 @@ const ACT_2 = 5;
 const TL_DURATION = ACT_1 + ACT_2;
 const SCROLL_PER_UNIT = 40;
 
+/* Em retrato não existe ato 1 (ainda), e sem nenhum respiro a máscara
+   começaria a abrir no primeiro pixel de rolagem. 1,5u = 60% de uma tela
+   parada, tempo de ler o título antes de o trailer tomar conta. */
+const LEAD_IN = 1.5;
+
 /* Quanto tempo cada letra leva para sumir/aparecer... */
 const CHAR_FADE = 0.5;
 /* ...e em quanto tempo o sorteio das letras se espalha (stagger total). */
@@ -162,6 +189,7 @@ const badge   = document.querySelector(".scroll-badge");
 const ring    = document.querySelector(".scroll-badge__ring");
 const stage   = document.querySelector(".stage");
 const reveal  = document.querySelector(".reveal");
+const hero    = document.querySelector(".hero");
 
 let splits = [];
 let master = null;
@@ -178,34 +206,107 @@ const rv = { w: 0, h: 0 };
 
 const setTitleX = gsap.quickSetter(title, "x", "px");
 const setTextsX = gsap.quickSetter(textBox, "x", "px");
+const setTitleY = gsap.quickSetter(title, "y", "px");
+const setTextsY = gsap.quickSetter(textBox, "y", "px");
 
-let titleGap = 0;   // do centro do .stage até a borda DIREITA do logo
-let textsGap = 0;   // do centro do .stage até a borda ESQUERDA da sinopse
+/* Deitado: do centro até a borda DIREITA do logo / ESQUERDA da sinopse.
+   Em pé:   do centro até a borda de BAIXO do logo / de CIMA da sinopse. */
+let titleGap = 0;
+let textsGap = 0;
 let pushPad  = 0;   // folga entre a borda da máscara e o conteúdo
 
-/* Medido com x = 0, senão as medidas saem contaminadas pelo próprio empurrão */
+/* Guardadas aqui para o ato 2 não depender de window.innerWidth/Height, que
+   no celular muda com a barra de endereço. O .hero é 100svh: altura estável. */
+let heroW = 0;
+let heroH = 0;
+
+/* Até onde a máscara precisa crescer no eixo do empurrão para cobrir a tela
+   inteira. Deitado é a largura do hero. Em pé é o dobro da maior distância
+   entre a origem e as bordas — porque em retrato a origem NÃO é o centro
+   geométrico (ver measurePush), e crescer simetricamente a partir de um ponto
+   descentrado deixaria uma faixa de fora. */
+let revealSpan = 0;
+
+/* Medido com x/y = 0, senão as medidas saem contaminadas pelo próprio empurrão */
 function measurePush() {
-  const box = stage.getBoundingClientRect();
-  const centerX = box.left + box.width / 2;
+  /* A máscara nasce no centro do .hero (é filha dele). No desktop isso é o
+     mesmo que o centro do .stage, que tem inset simétrico. */
+  const box = hero.getBoundingClientRect();
 
-  titleGap = centerX - title.getBoundingClientRect().right;
-  textsGap = textBox.getBoundingClientRect().left - centerX;
-  pushPad  = box.width * (40 / 1856);   // 40u de respiro
+  heroW = box.width;
+  heroH = box.height;
 
-  /* O frame do trailer precisa nascer já com a altura final do .stage — é o
-     que faz o vídeo ficar parado enquanto a máscara abre. Medir aqui é mais
-     confiável do que calcular em dvh, que varia de navegador para navegador
-     (e no mobile muda quando a barra de endereço aparece). */
-  reveal.style.setProperty("--frame-h", window.innerHeight + "px");
+  if (isPortrait) {
+    /* A máscara abre na COSTURA entre o título e a sinopse, não no meio da
+       tela. Empilhado, o meio da tela cai dentro da faixa de imagem, acima do
+       título — e aí o título já nasceria empurrado, porque a borda de cima da
+       máscara estaria além dele desde o primeiro quadro.
+
+       Abrindo na costura, as duas folgas nascem iguais e positivas, e a
+       cortina se parte exatamente onde o conteúdo se separa. */
+    const titleBox = title.getBoundingClientRect();
+    const textsBox = textBox.getBoundingClientRect();
+    const seamY    = (titleBox.bottom + textsBox.top) / 2;
+
+    reveal.style.top = (seamY - box.top) + "px";
+
+    /* O frame fica centrado na máscara, e a máscara agora está na costura —
+       então com tudo aberto o vídeo apareceria abaixo do meio da tela. Este
+       deslocamento devolve o vídeo ao centro do .hero, sem mexer na origem
+       da cortina. */
+    reveal.style.setProperty(
+      "--frame-shift", (box.top + box.height / 2 - seamY) + "px"
+    );
+
+    titleGap = seamY - titleBox.bottom;
+    textsGap = textsBox.top - seamY;
+
+    /* Zero, e não uma folga como no desktop. Lá o conteúdo está a centenas de
+       pixels do centro, e a folga só evita que ele encoste na máscara. Aqui o
+       título e a sinopse estão a 8px da costura: qualquer folga maior que isso
+       já os empurraria com a cortina ainda fechada. Com 0, eles ficam parados
+       até a máscara alcançá-los — que é o que faz o empurrão parecer causado
+       pela cortina, e não um deslocamento solto. */
+    pushPad  = 0;
+
+    revealSpan = 2 * Math.max(seamY - box.top, box.bottom - seamY);
+  } else {
+    const centerX = box.left + box.width / 2;
+
+    reveal.style.removeProperty("top");   // volta para o 50% do CSS
+    reveal.style.removeProperty("--frame-shift");
+
+    titleGap = centerX - title.getBoundingClientRect().right;
+    textsGap = textBox.getBoundingClientRect().left - centerX;
+    pushPad  = box.width * (40 / 1856);   // 40u de respiro
+
+    revealSpan = box.width;
+  }
+
+  /* O frame do trailer precisa nascer já com a altura final — é o que faz o
+     vídeo ficar parado enquanto a máscara abre. Medir o .hero é mais
+     confiável do que ler window.innerHeight, que no celular muda quando a
+     barra de endereço aparece. Em retrato o CSS ignora isto e usa 16/9. */
+  reveal.style.setProperty("--frame-h", box.height + "px");
 }
 
 function applyReveal() {
   reveal.style.width  = rv.w + "px";
   reveal.style.height = rv.h + "px";
 
-  const half = rv.w / 2 + pushPad;
-  setTitleX(-Math.max(0, half - titleGap));
-  setTextsX( Math.max(0, half - textsGap));
+  /* A máscara cresce a partir do centro, então a borda de cima está sempre em
+     (centro - altura/2) — ou a da esquerda em (centro - largura/2), deitado.
+     Enquanto essa borda não alcança o conteúdo, nada se move; a partir do
+     encontro, o conteúdo anda colado nela. É isso que dá o empurrão. */
+  if (isPortrait) {
+    const half = rv.h / 2 + pushPad;
+    setTitleY(-Math.max(0, half - titleGap));
+    setTextsY( Math.max(0, half - textsGap));
+  } else {
+    const half = rv.w / 2 + pushPad;
+    setTitleX(-Math.max(0, half - titleGap));
+    setTextsX( Math.max(0, half - textsGap));
+  }
 }
 
 
@@ -372,35 +473,54 @@ function buildTimeline() {
     master = null;
   }
   splits.forEach(s => s.revert());
+  splits = [];
 
-  /* --- quebra os três parágrafos em letras --- */
-  splits = textEls.map(el => SplitText.create(el, {
-    type: "words,chars",   // quebra por palavras também: preserva o wrap do texto
-    aria: "auto"           // leitores de tela continuam lendo o texto original
-  }));
+  /* --- ato 1: letra a letra, só no desktop por enquanto (etapa C) --- */
+  if (isPortrait) {
+    /* Em retrato a sinopse ainda não troca: o primeiro parágrafo fica, os
+       outros dois seguem invisíveis (o CSS já os deixa assim). */
+    gsap.set(textEls[0], { opacity: 1 });
+    gsap.set(textEls.slice(1), { opacity: 0 });
+  } else {
+    splits = textEls.map(el => SplitText.create(el, {
+      type: "words,chars",   // quebra por palavras também: preserva o wrap do texto
+      aria: "auto"           // leitores de tela continuam lendo o texto original
+    }));
 
-  /* --- estado inicial: só o primeiro texto visível --- */
-  gsap.set(textEls, { opacity: 1 });
-  gsap.set(splits[0].chars, { opacity: 1 });
-  gsap.set([...splits[1].chars, ...splits[2].chars], { opacity: 0 });
-  gsap.set(textBox, { color: "rgba(0, 0, 0, 0.9)" });
+    gsap.set(textEls, { opacity: 1 });
+    gsap.set(splits[0].chars, { opacity: 1 });
+    gsap.set([...splits[1].chars, ...splits[2].chars], { opacity: 0 });
+    gsap.set(textBox, { color: "rgba(0, 0, 0, 0.9)" });
+  }
+
   gsap.set(ring, { filter: "invert(0)" });
   gsap.set(badge, { opacity: 1 });
 
   /* --- estado inicial do ato 2 --- */
-  gsap.set([title, textBox], { x: 0 });
+  gsap.set([title, textBox], { x: 0, y: 0 });
   measurePush();
   rv.w = 0;
   rv.h = 0;
   applyReveal();
   player.reset();
 
+  /* Em retrato o canvas fica parado no primeiro quadro: a sequência de frames
+     é a etapa B. */
+  if (isPortrait) {
+    playhead.frame = 0;
+    render();
+  }
+
+  /* Sem o ato 1, a timeline do retrato é só um respiro + a máscara. */
+  const act2At   = isPortrait ? LEAD_IN : ACT_1;
+  const duration = act2At + ACT_2;
+
   /* --- a timeline --- */
   master = gsap.timeline({
     scrollTrigger: {
       trigger: ".hero",
       start: "top top",
-      end: "+=" + (TL_DURATION * SCROLL_PER_UNIT) + "%",
+      end: "+=" + (duration * SCROLL_PER_UNIT) + "%",
       pin: true,
       scrub: 1,             // 1s de defasagem: acompanha a rolagem com inércia
       invalidateOnRefresh: true,
@@ -418,6 +538,17 @@ function buildTimeline() {
     }
   });
 
+  /* ------------------------------------------------------------------------
+     ATO 1 — frames + troca de sinopse. Ainda só no desktop: em retrato as
+     etapas B e C entram aqui.
+     ------------------------------------------------------------------------ */
+  if (!isPortrait) buildAct1();
+
+  buildAct2(act2At, duration);
+}
+
+
+function buildAct1() {
   /* 3.1 — Frames: do primeiro ao último, cobrindo o ato 1 inteiro */
   master.to(playhead, {
     frame: LAST_FRAME,
@@ -477,43 +608,49 @@ function buildTimeline() {
     ease: "none",
     duration: ACT_1 * 0.08
   }, ACT_1 * 0.68);
+}
 
 
-  /* ------------------------------------------------------------------------
-     ATO 2 — a máscara abre e revela o trailer
-     ------------------------------------------------------------------------ */
+/* --------------------------------------------------------------------------
+   ATO 2 — a máscara abre e revela o trailer
 
-  /* 3.4 — O selo "role a página" sai antes da máscara passar por cima dele */
+   O mesmo movimento nos dois formatos, trocado de eixo. Deitado, a máscara
+   primeiro ganha altura (vira uma faixa vertical cheia) e depois largura, que
+   é o que empurra o logo e a sinopse para os lados. Em pé é o contrário:
+   primeiro a largura, depois a altura — e o empurrão é para cima e para
+   baixo, porque em retrato o título está ACIMA da sinopse, não ao lado.
+   -------------------------------------------------------------------------- */
+function buildAct2(at, duration) {
+  /* O selo "role a página" sai antes da máscara passar por cima dele */
   master.to(badge, {
     opacity: 0,
     ease: "power1.out",
     duration: ACT_2 * 0.22
-  }, ACT_1);
+  }, at);
 
-  /* 3.5 — Primeiro a altura (vira uma faixa horizontal saindo do centro)... */
+  /* Primeiro o eixo que só abre a faixa... */
   master.to(rv, {
-    h: window.innerHeight,
+    [isPortrait ? "w" : "h"]: isPortrait ? heroW : heroH,
     ease: "power2.out",
     duration: ACT_2 * 0.28,
     onUpdate: applyReveal
-  }, ACT_1);
+  }, at);
 
-  /* ...depois a largura, que é o que empurra o logo e a sinopse.
-     Termina exatamente no fim da timeline. */
+  /* ...depois o eixo do empurrão. Termina exatamente no fim da timeline. */
   master.to(rv, {
-    w: window.innerWidth,
+    [isPortrait ? "h" : "w"]: revealSpan,
     ease: "power2.inOut",
     duration: ACT_2 * 0.78,
     onUpdate: applyReveal
-  }, ACT_1 + ACT_2 * 0.22);
+  }, at + ACT_2 * 0.22);
 
-  /* 3.6 — Com a máscara aberta, entra o botão de play */
+  /* Com a máscara aberta, entra o botão de play */
   master.to(".player__big", {
     opacity: 1,
     scale: 1,
     ease: "back.out(2)",
     duration: ACT_2 * 0.16
-  }, TL_DURATION - ACT_2 * 0.16);
+  }, duration - ACT_2 * 0.16);
 }
 
 
@@ -685,35 +822,44 @@ function killTimelines() {
 /* Entra e sai do modo estático. Roda no boot e a cada virada do breakpoint,
    então girar o celular reorganiza a página sem recarregar. */
 function applyMode() {
-  if (isStatic) {
-    killTimelines();
+  killTimelines();
 
+  if (isStatic) {
     if (smoother) {
       smoother.kill();
       smoother = null;
     }
-
     player.standby();
   } else {
+    /* Retrato também é coreografia: precisa do pin, do scrub e da rolagem
+       suave que os alimenta. */
     if (!smoother) smoother = ScrollSmoother.create(SMOOTHER_OPTIONS);
 
     player.preview();
     buildTimeline();
-    buildCast();
+
+    /* O elenco ainda não tem versão retrato: em tela estreita ele segue
+       empilhado, com o layout do @media do style.css. */
+    if (!castStatic) buildCast();
   }
 
-  /* o .stage tem tamanhos bem diferentes nos dois modos */
+  /* o .stage tem tamanhos bem diferentes entre os modos */
   resizeCanvas();
   ScrollTrigger.refresh();
 }
 
 applyMode();
 
-STATIC_MQ.addEventListener("change", e => {
-  if (e.matches === isStatic) return;
-  isStatic = e.matches;
+/* Cada virada reaplica o modo do zero. Girar o celular passa por aqui. */
+function onModeChange() {
+  const before = [isStatic, isPortrait, castStatic].join();
+  readMode();
+  if ([isStatic, isPortrait, castStatic].join() === before) return;
   applyMode();
-});
+}
+
+REDUCED_MQ.addEventListener("change", onModeChange);
+NARROW_MQ.addEventListener("change", onModeChange);
 
 /* As fontes chegam depois do primeiro paint e mudam a quebra de linha: refaz
    o split (e as medidas do elenco) para tudo cair no lugar certo. No modo
@@ -725,7 +871,7 @@ if (document.fonts && document.fonts.ready) {
     if (isStatic) return;
 
     buildTimeline();
-    buildCast();
+    if (!castStatic) buildCast();
     ScrollTrigger.refresh();
   });
 }

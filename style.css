@@ -646,89 +646,13 @@ body {
   pointer-events: none;
 }
 
+
 /* ==========================================================================
-   MODO ESTÁTICO — movimento reduzido OU tela estreita
-   O main.js não cria o ScrollSmoother nem as timelines pinnadas quando a
-   mesma condição casa lá (const STATIC_MQ). Sem pin e sem scrub, tudo que a
-   rolagem revelava aos poucos precisa já nascer visível — e em fluxo normal,
-   porque as duas seções deixam de caber em uma tela só.
-
-   A lista de condições aqui e a string do matchMedia no main.js têm de andar
-   sempre juntas: divergir significa CSS em fluxo com JS pinando seções.
-
-   Este bloco resolve o COMPORTAMENTO (o que deixa de ser animado). O tamanho
-   das coisas no celular é o bloco seguinte, @media (max-width: 700px).
+   ELENCO ESTÁTICO — movimento reduzido OU tela estreita
+   O elenco ainda não tem versão retrato: em tela estreita ele sai do pin e
+   vira lista + grade de fotos. O par disto no main.js é castStatic.
    ========================================================================== */
 @media (prefers-reduced-motion: reduce), (max-width: 700px) {
-  /* ---------- Hero: o stage em cima, o trailer logo abaixo ---------- */
-  .hero {
-    height: auto;
-    display: flex;
-    flex-direction: column;
-    gap: calc(32 * var(--u));
-    /* o topo abre espaço para o logo e a navegação, que seguem absolutos */
-    padding: calc(120 * var(--u)) calc(32 * var(--u)) calc(32 * var(--u));
-  }
-
-  /* Sai do "inset" e entra no fluxo. A proporção do path é mantida para o
-     recorte de bordas arredondadas continuar caindo no lugar. */
-  .stage {
-    order: 1;
-    position: relative;
-    inset: auto;
-    width: 100%;
-    aspect-ratio: 1856 / 1016;
-  }
-
-  /* As três sinopses deixam de ser um baralho e viram três parágrafos */
-  .movie__texts { height: auto; }
-
-  .movie__desc,
-  .movie__desc[data-desc] {
-    position: relative;
-    opacity: 1;
-  }
-
-  .movie__desc + .movie__desc { margin-top: calc(16 * var(--u)); }
-
-  /* O selo só existe para convidar a rolar durante a animação */
-  .scroll-badge { display: none; }
-
-  /* ---------- Trailer: bloco normal, logo depois do stage ---------- */
-  .reveal {
-    order: 2;
-    position: relative;
-    left: auto;
-    top: auto;
-    transform: none;
-    width: 100%;
-    height: auto;
-    border-radius: calc(40 * var(--u));
-  }
-
-  .reveal__frame {
-    position: relative;
-    left: auto;
-    top: auto;
-    transform: none;
-    width: 100%;
-    height: auto;
-  }
-
-  .reveal__video {
-    height: auto;
-    aspect-ratio: 16 / 9;
-  }
-
-  /* Não há mais timeline para revelar o botão: ele já nasce pronto e
-     clicável, sem depender do .is-ready que o JS colocava. */
-  .player__big {
-    opacity: 1;
-    transform: none;
-    pointer-events: auto;
-  }
-
-  /* ---------- Elenco: a lista inteira + todas as fotos ---------- */
   .cast {
     height: auto;
     display: flex;
@@ -789,11 +713,19 @@ body {
 
 
 /* ==========================================================================
-   CELULAR — etapa 2a: hero
-   Só o que é de tamanho/arranjo. O que deixa de ser animado já foi resolvido
-   pelo bloco acima, que também casa em (max-width: 700px).
+   CELULAR — hero em retrato, COM a coreografia
+
+   A seção continua pinnada e a máscara continua abrindo: o que muda é o
+   formato. Deitado o conteúdo está lado a lado e a máscara empurra para os
+   lados; em pé ele está empilhado e ela empurra para cima e para baixo.
+
+   O "and (prefers-reduced-motion: no-preference)" é o que impede este bloco
+   de brigar com o de movimento reduzido num celular que pediu menos
+   movimento — lá vale o layout estático, e só ele.
+
+   O par disto no main.js é isPortrait.
    ========================================================================== */
-@media (max-width: 700px) {
+@media (max-width: 700px) and (prefers-reduced-motion: no-preference) {
   /* ------------------------------------------------------------------------
      A unidade de design.
      O layout nasceu para 1920px de largura, então 100cqw/1920 num aparelho de
@@ -803,38 +735,34 @@ body {
 
      Ainda assim, TEXTO e ÁREA DE TOQUE saem do sistema de unidades e vão para
      rem: são as duas coisas que não podem encolher junto com a tela.
-
-     Escopo por seção de propósito — o elenco é a etapa 2c.
      ------------------------------------------------------------------------ */
   .hero { --u: min(calc(100cqw / 480), 1px); }
 
-  /* ---------- Arranjo: cabeçalho em fluxo, stage, trailer ---------- */
+  /* ---------- A altura do pin ----------
+     100svh, não 100dvh. svh é a altura COM a barra de endereço visível e não
+     muda quando ela some; dvh muda o tempo todo durante a rolagem, e uma
+     seção pinnada que muda de altura no meio do movimento salta. O par disto
+     no main.js é o ScrollTrigger.config({ ignoreMobileResize: true }).
+     ------------------------------------------------------------------------ */
   .hero {
-    gap: 1rem;
+    height: 100vh;              /* fallback para quem não tem svh */
+    height: 100svh;
+
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
     padding: 1rem;
   }
 
-  .brand  { order: 0; }
-  .nav    { order: 1; }
-  .stage  { order: 2; }
-  .reveal { order: 3; }
+  /* ---------- Cabeçalho em fluxo ---------- */
+  .brand { order: 0; position: relative; left: auto; top: auto; }
+  .nav   { order: 1; }
+  .stage { order: 2; }
 
-  /* Logo e navegação deixam de ser absolutos e viram duas faixas no topo: a
-     360px não sobra largura para os dois lado a lado com alvo de toque
-     decente. */
-  .brand {
-    position: relative;
-    left: auto;
-    top: auto;
-  }
-
-  /* A marca é toda escrita em --u (aranha 38u + "MARVEL" 78u dentro de uma
-     caixa de 177u), então basta dar a ela uma unidade própria para o conjunto
-     encolher junto, sem recalcular filho por filho.
-
-     Sem isto ela sai com 144px numa tela de 390 — 37% da largura, contra 9%
-     no desktop. Proporcionalmente gigante, que é o efeito de "MARVEL grande"
-     mesmo com o arranjo correto. */
+  /* A marca é toda escrita em --u (aranha 38u + "MARVEL" 78u numa caixa de
+     177u), então uma unidade própria encolhe o conjunto sem recalcular filho
+     por filho. Sem isto ela ocupa 37% da largura da tela, contra 9% no
+     desktop — proporcionalmente gigante. */
   .brand { --u: min(calc(100cqw / 690), .75px); }
 
   .nav {
@@ -848,7 +776,7 @@ body {
   }
 
   /* 14px de texto e 44px de altura: o mínimo confortável para o polegar.
-     Em px/rem, não em --u, senão voltariam a encolher com a tela. */
+     Em rem, não em --u, senão voltariam a encolher com a tela. */
   .nav__link,
   .nav__cta {
     display: inline-flex;
@@ -865,29 +793,35 @@ body {
     border-radius: 999px;
   }
 
-  /* ---------- Stage: a imagem vira um bloco, o texto sai de cima dela -------
-     No desktop a sinopse fica sobre a sequência de frames, e funciona porque
-     a timeline vira a cor do texto de preto para branco acompanhando o
-     escurecer da arte. No celular não há timeline: o texto ficaria preto,
-     parado, por cima de um rosto — ilegível.
+  /* ---------- Stage: faixa de imagem em cima, texto embaixo ----------
+     O recorte do shape sai: o clipPath é objectBoundingBox e estica nos dois
+     eixos, então num retângulo alto e estreito os entalhes viram buracos.
 
-     Então o canvas deixa de ser plano de fundo e vira um bloco em fluxo, com
-     a proporção nativa dos frames (1920x1080). Título e sinopse caem logo
-     abaixo, sobre o vermelho escuro do .hero.
-
-     O recorte do shape também sai: o clipPath é objectBoundingBox e estica
-     nos dois eixos, então num retângulo estreito os entalhes viram buracos.
-     -------------------------------------------------------------------- */
+     E o canvas deixa de ser plano de fundo. Cobrindo um retângulo em pé, um
+     frame 16:9 seria cortado nas laterais a ponto de sobrar só o meio do
+     rosto — e a sinopse ficaria por cima dele, preta, sem a timeline que no
+     desktop vira a cor para branco. Como faixa 16:9 no topo, o frame aparece
+     inteiro e o texto cai embaixo, no vermelho escuro do hero.
+     ------------------------------------------------------------------------ */
   .stage {
-    aspect-ratio: auto;
+    position: relative;
+    inset: auto;
+    flex: 1;
+    min-height: 0;
+
     clip-path: none;
-    padding: 0;
     border-radius: 0;
+    padding: 0;
     background-color: transparent;
+
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
   }
 
   .stage__canvas {
     position: relative;
+    flex-shrink: 0;
     width: 100%;
     height: auto;
     aspect-ratio: 16 / 9;
@@ -895,36 +829,176 @@ body {
     background-color: #f2f2f2;   /* enquanto o primeiro frame não pinta */
   }
 
-  /* Título e sinopse lado a lado somam 894u — não cabem. Viram duas faixas. */
+  /* Título em cima, sinopse embaixo — é essa ordem que a máscara separa. */
   .movie {
     position: relative;
     left: auto;
     top: auto;
     width: 100%;
     margin-top: 0;
-    padding-top: 1.25rem;
+    flex: 1;
+    min-height: 0;
+
     flex-direction: column;
     align-items: stretch;
+    justify-content: center;
     gap: 1rem;
   }
 
   .movie__title {
-    width: min(100%, 15rem);
+    width: min(100%, 13rem);
     height: auto;
+    flex-shrink: 0;
   }
 
-  /* Claro sobre o vermelho escuro do hero: 11,7:1 contra #770000, bem acima
-     dos 4,5:1 da WCAG AA. No desktop esta cor é animada pelo scrub. */
+  /* Os três parágrafos empilhados no mesmo ponto, mas por grid em vez de
+     position:absolute: assim a caixa ganha a altura do mais alto sozinha, sem
+     altura fixa em --u — e a etapa C pode fazer o crossfade no mesmo lugar.
+
+     Claro sobre o vermelho escuro do hero: 12,5:1 medido no render. */
   .movie__texts {
     width: 100%;
+    height: auto;
     margin-top: 0;
+    display: grid;
     color: rgba(255, 255, 255, .92);
   }
 
   .movie__desc {
-    font-size: 1rem;
-    line-height: 1.55;
+    position: relative;
+    grid-area: 1 / 1;
+    font-size: .9375rem;
+    line-height: 1.5;
   }
 
-  .movie__desc + .movie__desc { margin-top: 1rem; }
+  /* Não cabe junto com o resto numa tela em pé, e o convite a rolar o celular
+     já resolve sozinho. */
+  .scroll-badge { display: none; }
+
+  /* ---------- A máscara e o trailer ----------
+     A máscara segue absoluta e centrada no .hero (o padrão), crescendo de 0
+     até a tela inteira. O frame por dentro nasce já no tamanho final, que é o
+     que faz o vídeo ficar parado enquanto ela abre.
+
+     Em pé o frame é uma faixa 16:9 centrada: esticar um trailer deitado para
+     cobrir uma tela em pé cortaria três quartos da imagem. O preto em volta é
+     a própria máscara. */
+  .reveal__frame {
+    width: 100vw;
+    height: auto;
+    aspect-ratio: 16 / 9;
+    transform: translate(-50%, calc(-50% + var(--frame-shift, 0px)));
+  }
+
+  /* ---------- Controles ----------
+     A barra é 880u de largura fixa, pensada para caber na faixa reta do shape
+     do desktop. Em 360px isso dava 660px: os botões saíam da tela. */
+  .player__big {
+    width: 5rem;
+    height: 5rem;
+    margin: -2.5rem 0 0 -2.5rem;
+  }
+
+  .player__bar {
+    width: auto;
+    left: 1rem;
+    right: 1rem;
+    transform: none;
+    bottom: 1rem;
+    gap: .5rem;
+    padding: .5rem .625rem;
+    border-radius: 999px;
+  }
+
+  .player__toggle,
+  .player__mute,
+  .player__full {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+
+  .player__icon { width: 1.25rem; height: 1.25rem; }
+
+  .player__time { font-size: .75rem; line-height: 1.2; }
+}
+
+
+/* ==========================================================================
+   MOVIMENTO REDUZIDO — hero estático
+   Quem pediu menos movimento não recebe coreografia nenhuma: sem pin, sem
+   scrub, sem ScrollSmoother. Tudo em fluxo e visível de saída.
+
+   Vem depois do bloco do celular de propósito — num aparelho estreito COM
+   movimento reduzido, é este que precisa vencer. O par disto no main.js é
+   isStatic.
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  /* ---------- Hero: o stage em cima, o trailer logo abaixo ---------- */
+  .hero {
+    height: auto;
+    display: flex;
+    flex-direction: column;
+    gap: calc(32 * var(--u));
+    /* o topo abre espaço para o logo e a navegação, que seguem absolutos */
+    padding: calc(120 * var(--u)) calc(32 * var(--u)) calc(32 * var(--u));
+  }
+
+  /* Sai do "inset" e entra no fluxo. A proporção do path é mantida para o
+     recorte de bordas arredondadas continuar caindo no lugar. */
+  .stage {
+    order: 1;
+    position: relative;
+    inset: auto;
+    width: 100%;
+    aspect-ratio: 1856 / 1016;
+  }
+
+  /* As três sinopses deixam de ser um baralho e viram três parágrafos */
+  .movie__texts { height: auto; }
+
+  .movie__desc,
+  .movie__desc[data-desc] {
+    position: relative;
+    opacity: 1;
+  }
+
+  .movie__desc + .movie__desc { margin-top: calc(16 * var(--u)); }
+
+  /* O selo só existe para convidar a rolar durante a animação */
+  .scroll-badge { display: none; }
+
+  /* ---------- Trailer: bloco normal, logo depois do stage ---------- */
+  .reveal {
+    order: 2;
+    position: relative;
+    left: auto;
+    top: auto;
+    transform: none;
+    width: 100%;
+    height: auto;
+    border-radius: calc(40 * var(--u));
+  }
+
+  .reveal__frame {
+    position: relative;
+    left: auto;
+    top: auto;
+    transform: none;
+    width: 100%;
+    height: auto;
+    aspect-ratio: auto;
+  }
+
+  .reveal__video {
+    height: auto;
+    aspect-ratio: 16 / 9;
+  }
+
+  /* Não há mais timeline para revelar o botão: ele já nasce pronto e
+     clicável, sem depender do .is-ready que o JS colocava. */
+  .player__big {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
 }
