@@ -1,0 +1,44 @@
+# ==========================================================================
+# Spider-Man: Um Novo Dia — site estático (HTML/CSS/JS puro)
+#
+# Não há etapa de build: o que está no repositório é exatamente o que vai
+# para o ar. Por isso a pasta assets/ inteira É versionada, trailer.mp4
+# incluso — ela não é artefato gerado, é o site.
+# ==========================================================================
+
+# ---------- Lixo do Windows ----------
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.stackdump
+
+# ---------- Lixo do macOS (quem clonar pode estar em outro sistema) ----------
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# ---------- Lixo do Linux ----------
+*~
+.directory
+.Trash-*
+
+# ---------- Editores ----------
+# Preferências locais (porta do Live Server, etc.), não do projeto.
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
+
+# ---------- Sobras de trabalho ----------
+*.log
+*.bak
+*.tmp
+*.orig
+*.rej
