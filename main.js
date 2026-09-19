@@ -354,6 +354,7 @@ const player = (() => {
 
   let watching = false;
   let seeking  = false;
+  let armed    = false;   // a prévia já está rodando (e o arquivo, baixando)
 
   const fmt = s => {
     if (!isFinite(s) || s < 0) return "0:00";
@@ -362,6 +363,8 @@ const player = (() => {
 
   /* ---------- modos ---------- */
   function preview() {
+    armed = true;
+
     video.loop = true;
     video.muted = true;
     video.currentTime = 0;
@@ -475,6 +478,7 @@ const player = (() => {
      dois modos é o applyMode(), na seção 5. */
   function standby() {
     watching = false;
+    armed    = false;
 
     root.classList.remove("is-playing", "is-paused", "is-muted");
     video.loop = false;
@@ -483,7 +487,19 @@ const player = (() => {
     gsap.set(overlay, { clearProps: "opacity", overwrite: true });
   }
 
-  return { reset, setReady, preview, standby };
+  /* Liga e desliga a prévia conforme a máscara se aproxima.
+
+     A prévia é o que dispara o download do trailer, e são 17 MB — em dados
+     móveis, de quem talvez só quisesse ler a sinopse. Então ela não começa
+     mais no boot: a timeline do hero arma isto quando falta pouco para o ato
+     2 (ver buildTimeline), o que dá tempo de encher o buffer antes de a
+     máscara abrir sem cobrar o arquivo de quem nunca chega lá. */
+  function arm(on) {
+    if (on === armed) return;
+    on ? preview() : standby();
+  }
+
+  return { reset, setReady, preview, standby, arm };
 })();
 
 
@@ -524,13 +540,17 @@ function buildTimeline() {
   rv.w = 0;
   rv.h = 0;
   applyReveal();
-  player.reset();
+  player.standby();
 
   playhead.frame = 0;
   render();
 
   const act2At   = isPortrait ? ACT_1_PORTRAIT : ACT_1;
   const duration = act2At + ACT_2;
+
+  /* Duas unidades de folga antes do ato 2 — cerca de 80% de uma tela de
+     rolagem — para o vídeo ter o que mostrar quando a máscara abrir. */
+  const armAt = Math.max(0, act2At - 2) / duration;
 
   /* --- a timeline --- */
   master = gsap.timeline({
@@ -543,15 +563,17 @@ function buildTimeline() {
       invalidateOnRefresh: true,
 
       /* o botão de play só fica clicável com a máscara aberta; sair da Hero
-         (rolando pra cima ou pra baixo) devolve o trailer ao modo prévia,
-         para não deixar o áudio tocando fora da tela */
+         (rolando pra cima ou pra baixo) para o trailer, para não deixar o
+         áudio tocando fora da tela nem o arquivo baixando à toa */
       onUpdate: self => {
         const open = self.progress > 0.99;
         player.setReady(open);
         if (!open) player.reset();
+
+        player.arm(self.progress >= armAt);
       },
-      onLeave: () => player.reset(),
-      onLeaveBack: () => player.reset()
+      onLeave: () => player.standby(),
+      onLeaveBack: () => player.standby()
     }
   });
 
@@ -869,7 +891,9 @@ function applyMode() {
        suave que os alimenta. */
     if (!smoother) smoother = ScrollSmoother.create(SMOOTHER_OPTIONS);
 
-    player.preview();
+    /* A prévia não começa aqui: quem liga é a timeline do hero, perto do
+       ato 2 (ver player.arm). */
+    player.standby();
     buildTimeline();
     buildCast();
   }

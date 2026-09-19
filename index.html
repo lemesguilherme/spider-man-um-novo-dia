@@ -115,14 +115,20 @@
          desenhada no <canvas>, controlada pela rolagem. -->
           <div class="reveal" id="trailer">
             <div class="reveal__frame">
+              <!--
+                Sem "autoplay" e com preload="metadata": os 17 MB do arquivo
+                só começam a vir quando o main.js dá play, perto de a máscara
+                abrir (ver player.arm). Com autoplay OU preload="auto" o
+                navegador baixaria o trailer inteiro no load, mesmo para quem
+                só veio ler a sinopse.
+              -->
               <video
                 class="reveal__video"
                 src="assets/trailer.mp4"
                 muted
                 loop
                 playsinline
-                autoplay
-                preload="auto"
+                preload="metadata"
                 aria-label="Trailer de Spider-Man: Um Novo Dia"
               ></video>
 
