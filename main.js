@@ -19,26 +19,43 @@
 gsap.registerPlugin(ScrollTrigger, ScrollSmoother, SplitText);
 
 /* ==========================================================================
-   0 — MOVIMENTO REDUZIDO
-   Quem pede "reduzir movimento" no sistema não recebe nem a rolagem suave
-   nem as duas timelines pinnadas: sem pin e sem scrub, nada aqui depende da
-   rolagem para aparecer. O layout estático correspondente está no
-   @media (prefers-reduced-motion: reduce) do style.css — os dois precisam
-   ser mexidos juntos.
+   0 — MODO ESTÁTICO
+   Duas situações dispensam a coreografia de rolagem:
+
+     - "reduzir movimento" ligado no sistema;
+     - tela estreita, onde as duas timelines pinnadas são caras e o layout
+       desenhado para 1920px não cabe de jeito nenhum.
+
+   Nos dois casos não há pin, não há scrub e nada depende da rolagem para
+   aparecer. A condição abaixo é DE PROPÓSITO a mesma string do @media do
+   style.css: se as duas listas divergirem, o CSS mostra um layout em fluxo
+   enquanto o JS ainda pina as seções — pior do que qualquer um dos modos.
+
+   Diferente de "reduzir movimento", largura de tela muda com a página já
+   carregada (girar o celular). Por isso não basta ler uma vez: o modo é
+   aplicado por applyMode(), na seção 5, que escuta a virada.
    ========================================================================== */
-const REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const STATIC_MQ = window.matchMedia(
+  "(prefers-reduced-motion: reduce), (max-width: 700px)"
+);
+
+let isStatic = STATIC_MQ.matches;
 
 
 /* ==========================================================================
    1 — ROLAGEM SUAVE
+   Criada e destruída junto com as timelines (ver applyMode): rolagem com
+   inércia é movimento, e no modo estático ela não deve existir.
    ========================================================================== */
-const smoother = REDUCED ? null : ScrollSmoother.create({
+const SMOOTHER_OPTIONS = {
   wrapper: "#smooth-wrapper",
   content: "#smooth-content",
   smooth: 2,          // segundos que a página leva para "alcançar" a rolagem
   effects: true,
   normalizeScroll: true
-});
+};
+
+let smoother = null;
 
 
 /* ==========================================================================
@@ -329,12 +346,21 @@ const player = (() => {
     if (e.key === " " && watching) { e.preventDefault(); toggle.click(); }
   });
 
-  /* Prévia em loop é movimento contínuo na tela: com movimento reduzido o
-     trailer fica parado, esperando o clique no play. */
-  if (REDUCED) video.loop = false;
-  else preview();
+  /* Prévia em loop é movimento contínuo na tela e 18 MB que o visitante não
+     pediu — no celular, com dados móveis, ainda pior. No modo estático o
+     trailer fica parado, esperando o clique no play. Quem escolhe entre os
+     dois modos é o applyMode(), na seção 5. */
+  function standby() {
+    watching = false;
 
-  return { reset, setReady };
+    root.classList.remove("is-playing", "is-paused", "is-muted");
+    video.loop = false;
+    video.pause();
+
+    gsap.set(overlay, { clearProps: "opacity", overwrite: true });
+  }
+
+  return { reset, setReady, preview, standby };
 })();
 
 
@@ -621,25 +647,87 @@ function buildCast() {
 
 
 /* ==========================================================================
-   5 — BOOT E RESIZE
+   5 — BOOT E TROCA DE MODO
    ========================================================================== */
-resizeCanvas();
 
-/* Com movimento reduzido o canvas fica parado no primeiro quadro e é só
-   isso: nenhum pin, nenhum scrub, nenhum SplitText. */
-if (!REDUCED) {
-  buildTimeline();
-  buildCast();
+/* Tudo que o GSAP escreveu inline precisa sair quando as timelines morrem.
+   Estilo inline ganha de qualquer regra de @media: um width:0px sobrando no
+   .reveal ou um height:0% sobrando num .cast__shot deixaria o layout
+   estático com buracos no lugar do trailer e das fotos. */
+function clearInlineStyles() {
+  gsap.set(
+    [title, textBox, badge, ring, ...textEls, ".player__big", ...shots, ...slides],
+    { clearProps: "all" }
+  );
 
-  /* As fontes chegam depois do primeiro paint e mudam a quebra de linha:
-     refaz o split (e as medidas do elenco) para tudo cair no lugar certo. */
-  if (document.fonts && document.fonts.ready) {
-    document.fonts.ready.then(() => {
-      buildTimeline();
-      buildCast();
-      ScrollTrigger.refresh();
-    });
+  reveal.removeAttribute("style");            // leva junto o --frame-h
+  castMedia.style.removeProperty("--media-h");
+  castFill.style.removeProperty("height");
+  castSpider.style.removeProperty("top");
+}
+
+function killTimelines() {
+  [master, castTl].forEach(tl => {
+    if (!tl) return;
+    if (tl.scrollTrigger) tl.scrollTrigger.kill(true);
+    tl.kill();
+  });
+  master = null;
+  castTl = null;
+
+  /* devolve os parágrafos ao texto original, sem os <span> de cada letra */
+  splits.forEach(s => s.revert());
+  splits = [];
+
+  clearInlineStyles();
+}
+
+/* Entra e sai do modo estático. Roda no boot e a cada virada do breakpoint,
+   então girar o celular reorganiza a página sem recarregar. */
+function applyMode() {
+  if (isStatic) {
+    killTimelines();
+
+    if (smoother) {
+      smoother.kill();
+      smoother = null;
+    }
+
+    player.standby();
+  } else {
+    if (!smoother) smoother = ScrollSmoother.create(SMOOTHER_OPTIONS);
+
+    player.preview();
+    buildTimeline();
+    buildCast();
   }
+
+  /* o .stage tem tamanhos bem diferentes nos dois modos */
+  resizeCanvas();
+  ScrollTrigger.refresh();
+}
+
+applyMode();
+
+STATIC_MQ.addEventListener("change", e => {
+  if (e.matches === isStatic) return;
+  isStatic = e.matches;
+  applyMode();
+});
+
+/* As fontes chegam depois do primeiro paint e mudam a quebra de linha: refaz
+   o split (e as medidas do elenco) para tudo cair no lugar certo. No modo
+   estático não há split nem medida para refazer, mas o canvas ainda precisa
+   ser redimensionado — a altura do .stage vem do texto. */
+if (document.fonts && document.fonts.ready) {
+  document.fonts.ready.then(() => {
+    resizeCanvas();
+    if (isStatic) return;
+
+    buildTimeline();
+    buildCast();
+    ScrollTrigger.refresh();
+  });
 }
 
 /* Só refaz o split quando a LARGURA muda: no mobile, a barra de endereço
@@ -683,8 +771,8 @@ nav.addEventListener("click", e => {
 
   e.preventDefault();
 
-  /* Sem ScrollSmoother (movimento reduzido) os dois destinos são elementos
-     de verdade — o trailer já está aberto e em fluxo normal. */
+  /* Sem ScrollSmoother (modo estático) os dois destinos são elementos de
+     verdade — o trailer já está aberto e em fluxo normal. */
   if (!smoother) {
     document.querySelector(link.getAttribute("href"))
       .scrollIntoView({ behavior: "auto", block: "start" });

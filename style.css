@@ -647,13 +647,19 @@ body {
 }
 
 /* ==========================================================================
-   MOVIMENTO REDUZIDO
-   O main.js não cria o ScrollSmoother nem as timelines pinnadas quando
-   REDUCED é verdadeiro. Sem pin e sem scrub, tudo que a rolagem revelava aos
-   poucos precisa já nascer visível — e em fluxo normal, porque as duas seções
-   deixam de caber em uma tela só.
+   MODO ESTÁTICO — movimento reduzido OU tela estreita
+   O main.js não cria o ScrollSmoother nem as timelines pinnadas quando a
+   mesma condição casa lá (const STATIC_MQ). Sem pin e sem scrub, tudo que a
+   rolagem revelava aos poucos precisa já nascer visível — e em fluxo normal,
+   porque as duas seções deixam de caber em uma tela só.
+
+   A lista de condições aqui e a string do matchMedia no main.js têm de andar
+   sempre juntas: divergir significa CSS em fluxo com JS pinando seções.
+
+   Este bloco resolve o COMPORTAMENTO (o que deixa de ser animado). O tamanho
+   das coisas no celular é o bloco seguinte, @media (max-width: 700px).
    ========================================================================== */
-@media (prefers-reduced-motion: reduce) {
+@media (prefers-reduced-motion: reduce), (max-width: 700px) {
   /* ---------- Hero: o stage em cima, o trailer logo abaixo ---------- */
   .hero {
     height: auto;
@@ -782,6 +788,113 @@ body {
 }
 
 
-@media (max-width: 700px){
- 
+/* ==========================================================================
+   CELULAR — etapa 2a: hero
+   Só o que é de tamanho/arranjo. O que deixa de ser animado já foi resolvido
+   pelo bloco acima, que também casa em (max-width: 700px).
+   ========================================================================== */
+@media (max-width: 700px) {
+  /* ------------------------------------------------------------------------
+     A unidade de design.
+     O layout nasceu para 1920px de largura, então 100cqw/1920 num aparelho de
+     360px dá 0,1875px por unidade — a sinopse de 20u sairia com 3,75px. Aqui
+     a unidade passa a valer por uma tela de referência de 480px, com teto de
+     1px para a faixa 480–700 não crescer além do tamanho original do Figma.
+
+     Ainda assim, TEXTO e ÁREA DE TOQUE saem do sistema de unidades e vão para
+     rem: são as duas coisas que não podem encolher junto com a tela.
+
+     Escopo por seção de propósito — o elenco é a etapa 2c.
+     ------------------------------------------------------------------------ */
+  .hero { --u: min(calc(100cqw / 480), 1px); }
+
+  /* ---------- Arranjo: cabeçalho em fluxo, stage, trailer ---------- */
+  .hero {
+    gap: 1rem;
+    padding: 1rem;
+  }
+
+  .brand  { order: 0; }
+  .nav    { order: 1; }
+  .stage  { order: 2; }
+  .reveal { order: 3; }
+
+  /* Logo e navegação deixam de ser absolutos e viram duas faixas no topo: a
+     360px não sobra largura para os dois lado a lado com alvo de toque
+     decente (o logo sozinho já ocupa 133px). */
+  .brand {
+    position: relative;
+    left: auto;
+    top: auto;
+  }
+
+  .nav {
+    position: relative;
+    right: auto;
+    top: auto;
+    width: 100%;
+    height: auto;
+    justify-content: flex-start;
+    gap: .75rem;
+  }
+
+  /* 14px de texto e 44px de altura: o mínimo confortável para o polegar.
+     Em px/rem, não em --u, senão voltariam a encolher com a tela. */
+  .nav__link,
+  .nav__cta {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.75rem;
+    font-size: .875rem;
+    line-height: 1.2;
+  }
+
+  .nav__link { padding: 0 .5rem; }
+
+  .nav__cta {
+    padding: 0 1.25rem;
+    border-radius: 999px;
+  }
+
+  /* ---------- Stage ---------- */
+  /* O recorte foi desenhado para uma caixa de 1856x1016. Como o clipPath é
+     objectBoundingBox, ele estica nos dois eixos: num retângulo alto e
+     estreito os entalhes viram buracos enormes e comem o conteúdo. No
+     celular o shape sai e fica só o canto arredondado. */
+  .stage {
+    aspect-ratio: auto;
+    clip-path: none;
+    border-radius: 1.25rem;
+    padding: 1.5rem 1.25rem;
+  }
+
+  /* Título e sinopse lado a lado somam 894u — não cabem. Viram duas faixas,
+     e o .stage passa a ter a altura do próprio conteúdo. */
+  .movie {
+    position: relative;
+    left: auto;
+    top: auto;
+    width: 100%;
+    margin-top: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1.25rem;
+  }
+
+  .movie__title {
+    width: min(100%, 15rem);
+    height: auto;
+  }
+
+  .movie__texts {
+    width: 100%;
+    margin-top: 0;
+  }
+
+  .movie__desc {
+    font-size: 1rem;
+    line-height: 1.55;
+  }
+
+  .movie__desc + .movie__desc { margin-top: 1rem; }
 }
